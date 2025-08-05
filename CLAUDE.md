@@ -15,6 +15,8 @@ This project creates a Flask web application to remotely control a Waveshare 2.7
 ```
 /home/pi/eink_os/
 ├── app.py                          # Basic Flask app
+├── app_4bit.py                     # 4-bit grayscale Flask app (has display issues)
+├── app_1bit_working.py             # ✅ WORKING 1-bit B&W Flask app (RECOMMENDED)
 ├── app_enhanced.py                 # Enhanced Flask app with web UI
 ├── app_safe.py                     # Safe version with error handling
 ├── harrypotter_quiz.py             # Original quiz wrapper
@@ -41,14 +43,16 @@ This project creates a Flask web application to remotely control a Waveshare 2.7
 
 ## Key Components
 
-### 1. Flask Web Application (`app_enhanced.py`)
-- **Framework**: Flask web server
+### 1. Flask Web Application (`app_1bit_working.py` - RECOMMENDED)
+- **Framework**: Flask web server  
 - **Port**: 5000 (accessible at http://192.168.0.9:5000)
+- **Display Mode**: 1-bit black and white (confirmed working)
 - **Features**:
   - Web-based control interface
   - Real-time status updates
-  - Error handling and logging
+  - Enhanced error handling and detailed logging
   - RESTful API endpoints
+  - All display functions confirmed working
 
 ### 2. Display Functions
 - **Clear Display**: `/clear` - Clears the e-Paper screen
@@ -103,11 +107,14 @@ ssh -i "C:\Users\tuan\.ssh\id_rsa_pi3b" pi@192.168.0.9
 # Navigate to project directory
 cd /home/pi/eink_os
 
-# Start server
-./start_server.sh
+# Start WORKING server (RECOMMENDED)
+/home/pi/e-Paper/RaspberryPi_JetsonNano/python/examples/testenv/bin/python app_1bit_working.py
 
-# Or start manually
-/home/pi/e-Paper/RaspberryPi_JetsonNano/python/examples/testenv/bin/python app_enhanced.py
+# Or start in background
+/home/pi/e-Paper/RaspberryPi_JetsonNano/python/examples/testenv/bin/python app_1bit_working.py > flask.log 2>&1 &
+
+# Legacy start server script (may not work due to display issues)
+./start_server.sh
 ```
 
 ### Accessing the Web Interface
@@ -139,12 +146,36 @@ tail -20 /home/pi/eink_os/flask.log
 ### Display Specifications
 - **Model**: Waveshare 2.7" e-Paper Display (epd2in7_V2)
 - **Resolution**: 264x176 pixels
-- **Colors**: 4-bit grayscale (16 levels of gray)
+- **Colors**: 4-bit grayscale (16 levels of gray) - **SEE CRITICAL FINDINGS BELOW**
 - **Interface**: SPI communication via GPIO
 - **Refresh Time**: 4-15 seconds for full refresh
 - **Power Consumption**: Very low (μA in sleep mode)
 - **Viewing Angle**: Nearly 180° (paper-like)
 - **Update Mechanism**: Electrophoretic display technology
+
+### ⚠️ CRITICAL FINDINGS - Display Mode Compatibility
+
+**IMPORTANT DISCOVERY**: This specific Waveshare 2.7" display hardware has limited 4-bit grayscale support:
+
+**✅ What Works:**
+- **1-bit Black & White Mode**: `epd.display(epd.getbuffer(image))` with `Image.new('1', ...)` - **FULLY FUNCTIONAL**
+- **4-bit Grayscale with Pre-made Bitmaps**: Works with existing `.bmp` files (like `2in7_Scale.bmp`)
+- **Clear Function**: `epd.Clear()` - Always works
+
+**❌ What Doesn't Work:**
+- **4-bit Grayscale with Programmatic Drawing**: `epd.display_4Gray()` with `Image.new('L', ...)` 
+  - API calls return success but nothing displays visually
+  - Affects: Test patterns, text, shapes drawn with PIL/ImageDraw
+
+**Root Cause Analysis:**
+1. Hardware limitation: The display controller doesn't properly render programmatically created 4-bit grayscale images
+2. Pre-made bitmaps work because they're already in the correct format for the display
+3. The Waveshare library reports success even when the display operation fails silently
+
+**Recommended Solution:**
+- Use `app_1bit_working.py` for reliable operation
+- All display functions work perfectly in 1-bit black & white mode
+- Visual content displays correctly and consistently
 
 ### Critical Implementation Notes
 
@@ -309,23 +340,28 @@ def new_function():
 
 ### Server Management
 ```bash
-# Start server (current working version)
-cd /home/pi/eink_os && /home/pi/e-Paper/RaspberryPi_JetsonNano/python/examples/testenv/bin/python app_4bit.py > flask.log 2>&1 &
+# Start server (WORKING VERSION - RECOMMENDED)
+cd /home/pi/eink_os && /home/pi/e-Paper/RaspberryPi_JetsonNano/python/examples/testenv/bin/python app_1bit_working.py > flask.log 2>&1 &
 
 # Stop server
-pkill -f app_4bit.py
+pkill -f app_1bit_working.py
 
 # Check server status
 ss -tlnp | grep :5000
-ps aux | grep app_4bit
+ps aux | grep app_1bit_working
 
 # View logs
 tail -f /home/pi/eink_os/flask.log
 
-# Test server endpoints
+# Test server endpoints (ALL CONFIRMED WORKING)
 curl http://localhost:5000/clear
-curl http://localhost:5000/test
-curl http://localhost:5000/hello
+curl http://localhost:5000/test      # ✅ Displays black squares and text
+curl http://localhost:5000/hello     # ✅ Shows "Hello World" message
+curl http://localhost:5000/time      # ✅ Shows current date/time
+
+# Legacy commands (for problematic 4-bit version)
+# pkill -f app_4bit.py
+# ps aux | grep app_4bit
 ```
 
 ### GPIO and Process Management
