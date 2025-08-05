@@ -84,6 +84,20 @@
         </div>
         
         <div class="section">
+            <h2>🖼️ AI Image Gallery</h2>
+            <p>Display from 185+ pre-generated Harry Potter images</p>
+            <button class="button" onclick="callAPI('/images/random')">🎲 Random Image</button>
+            <button class="button" onclick="loadImageList()">📂 Browse Gallery</button>
+            
+            <div id="imageGallery" style="display: none; margin-top: 15px;">
+                <h3>Select an Image:</h3>
+                <div id="imageList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+                    Loading images...
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
             <h2>Applications</h2>
             <button class="button" onclick="callAPI('/quiz/start')">Harry Potter Quiz</button>
         </div>
@@ -157,6 +171,69 @@
             })
             .catch(error => {
                 updateStatus("Error: " + error, "error");
+            });
+        }
+        
+        function loadImageList() {
+            updateStatus('Loading image gallery...');
+            document.getElementById('imageGallery').style.display = 'block';
+            document.getElementById('imageList').innerHTML = 'Loading images...';
+            
+            fetch('/images/list')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        displayImageList(data.images, data.total_count);
+                        updateStatus(`✅ Loaded ${data.images.length} images (${data.total_count} total)`, 'success');
+                    } else {
+                        updateStatus('Error: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    updateStatus('Error loading images: ' + error, 'error');
+                });
+        }
+        
+        function displayImageList(images, totalCount) {
+            const listEl = document.getElementById('imageList');
+            if (images.length === 0) {
+                listEl.innerHTML = '<p>No images found</p>';
+                return;
+            }
+            
+            let html = `<p style="margin-bottom: 10px;"><strong>Showing ${images.length} of ${totalCount} images</strong></p>`;
+            images.forEach(filename => {
+                // Extract timestamp from filename for display
+                const match = filename.match(/(\d{8}_\d{6})/);
+                const timestamp = match ? match[1] : 'unknown';
+                const displayName = `Image ${timestamp}`;
+                
+                html += `
+                    <div style="margin: 5px 0; padding: 8px; border: 1px solid #eee; border-radius: 4px; cursor: pointer; background: #fafafa;"
+                         onclick="displayImage('${filename}')" 
+                         onmouseover="this.style.background='#e3f2fd'"
+                         onmouseout="this.style.background='#fafafa'">
+                        <strong>${displayName}</strong><br>
+                        <small style="color: #666;">${filename}</small>
+                    </div>`;
+            });
+            listEl.innerHTML = html;
+        }
+        
+        function displayImage(filename) {
+            updateStatus(`🖼️ Displaying image: ${filename}... (This may take 10-15 seconds)`);
+            
+            fetch('/images/display', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filename: filename})
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateStatus(data.status + ': ' + data.message, data.status);
+            })
+            .catch(error => {
+                updateStatus('Error displaying image: ' + error, 'error');
             });
         }
         function updateStatus(message, type) {

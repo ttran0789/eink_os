@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import logging
+import glob
 from flask import Flask, jsonify, request, render_template
 from datetime import datetime
 
@@ -23,6 +24,7 @@ epaper_root = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python'
 libdir = os.path.join(epaper_root, 'lib')
 examplesdir = os.path.join(epaper_root, 'examples')
 picdir = os.path.join(epaper_root, 'pic')
+images_dir = '/home/pi/rpi-screen/images'  # AI generated images directory
 
 if os.path.exists(libdir):
     sys.path.insert(0, libdir)
@@ -62,6 +64,47 @@ def cleanup_display():
             logger.info("Display sleep completed")
     except Exception as e:
         logger.error(f'Error during cleanup: {e}')
+
+def init_display_4gray():
+    """Initialize display for 4-bit grayscale mode (for pre-made bitmaps)"""
+    global epd
+    try:
+        if epd is None:
+            epd = epd2in7_V2.EPD()
+        logger.info("Initializing display for 4-bit grayscale...")
+        epd.Init_4Gray()
+        logger.info("4-bit grayscale display initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f'Failed to initialize 4-bit display: {e}')
+        return False
+
+def display_image_4bit(filepath):
+    """Display a 4-level grayscale bitmap image (works with pre-made bitmaps)"""
+    logger.info(f"Displaying 4-bit image: {filepath}")
+    try:
+        init_display_4gray()
+        
+        # Load and process image
+        img = Image.open(filepath).convert('L')  # Convert to grayscale
+        img = img.resize((epd.height, epd.width))  # Note: height x width for landscape
+        
+        # Map to 4 grayscale levels: 0, 85, 170, 255 (Harry Potter quiz technique)
+        logger.info("Applying 4-level grayscale mapping...")
+        img = img.point(lambda x: 0 if x < 64 else 85 if x < 128 else 170 if x < 192 else 255, 'L')
+        
+        # Display using 4-bit grayscale mode
+        logger.info("Displaying 4-bit grayscale image...")
+        epd.display_4Gray(epd.getbuffer_4Gray(img))
+        logger.info("4-bit image display completed")
+        
+        time.sleep(2)
+        cleanup_display()
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error displaying 4-bit image: {e}")
+        return False
 
 @app.route('/')
 def index():
@@ -273,6 +316,98 @@ def start_quiz():
         return jsonify({'status': 'success', 'message': 'Quiz started'})
     except Exception as e:
         logger.error(f"Quiz error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/images/list')
+def list_images():
+    """List all available AI-generated images"""
+    logger.info("Image list requested")
+    try:
+        if not os.path.exists(images_dir):
+            return jsonify({'status': 'error', 'message': 'Images directory not found'})
+        
+        # Find all resized Harry Potter images (these are display-ready)
+        pattern = os.path.join(images_dir, 'ai_hp*resized*.bmp')
+        image_files = glob.glob(pattern)
+        
+        # Sort by modification time (newest first)
+        image_files.sort(key=os.path.getmtime, reverse=True)
+        
+        # Extract just filenames for response
+        image_names = [os.path.basename(f) for f in image_files]
+        
+        logger.info(f"Found {len(image_names)} images")
+        return jsonify({
+            'status': 'success', 
+            'message': f'Found {len(image_names)} images',
+            'images': image_names[:50],  # Limit to 50 most recent
+            'total_count': len(image_names)
+        })
+    except Exception as e:
+        logger.error(f"Error listing images: {e}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/images/display', methods=['POST'])
+def display_selected_image():
+    """Display a selected image from the gallery"""
+    logger.info("Image display requested")
+    try:
+        data = request.json
+        if not data or 'filename' not in data:
+            return jsonify({'status': 'error', 'message': 'Filename required'})
+        
+        filename = data['filename']
+        filepath = os.path.join(images_dir, filename)
+        
+        # Security check - ensure file exists and is in images directory
+        if not os.path.exists(filepath):
+            return jsonify({'status': 'error', 'message': 'Image file not found'})
+        
+        if not os.path.abspath(filepath).startswith(os.path.abspath(images_dir)):
+            return jsonify({'status': 'error', 'message': 'Invalid file path'})
+        
+        # Display the image using 4-bit grayscale (works with pre-made bitmaps)
+        success = display_image_4bit(filepath)
+        
+        if success:
+            return jsonify({'status': 'success', 'message': f'Displaying image: {filename}'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to display image'})
+            
+    except Exception as e:
+        logger.error(f"Error displaying image: {e}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/images/random')
+def display_random_image():
+    """Display a random image from the gallery"""
+    logger.info("Random image requested")
+    try:
+        if not os.path.exists(images_dir):
+            return jsonify({'status': 'error', 'message': 'Images directory not found'})
+        
+        # Find all resized images
+        pattern = os.path.join(images_dir, 'ai_hp*resized*.bmp')
+        image_files = glob.glob(pattern)
+        
+        if not image_files:
+            return jsonify({'status': 'error', 'message': 'No images found'})
+        
+        # Select random image
+        import random
+        selected_file = random.choice(image_files)
+        filename = os.path.basename(selected_file)
+        
+        # Display the image
+        success = display_image_4bit(selected_file)
+        
+        if success:
+            return jsonify({'status': 'success', 'message': f'Displaying random image: {filename}'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to display random image'})
+            
+    except Exception as e:
+        logger.error(f"Error displaying random image: {e}")
         return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':
