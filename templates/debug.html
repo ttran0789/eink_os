@@ -1,0 +1,50 @@
+<\!DOCTYPE html>
+<html>
+<head>
+    <title>Debug E-Paper Display</title>
+</head>
+<body>
+    <h1>Debug E-Paper Display</h1>
+    
+    <button onclick="testAPI()">Test Clear (Debug)</button>
+    <button onclick="testPattern()">Test Pattern (Debug)</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        function testAPI() {
+            console.log('Testing clear endpoint...');
+            fetch('/clear')
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Response data:', data);
+                    document.getElementById('result').innerHTML = JSON.stringify(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('result').innerHTML = 'Error: ' + error;
+                });
+        }
+        
+        function testPattern() {
+            console.log('Testing pattern endpoint...');
+            fetch('/test')
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Response data:', data);
+                    document.getElementById('result').innerHTML = JSON.stringify(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('result').innerHTML = 'Error: ' + error;
+                });
+        }
+    </script>
+</body>
+</html>

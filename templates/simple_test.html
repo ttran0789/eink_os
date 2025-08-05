@@ -1,0 +1,48 @@
+<\!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Test</title>
+</head>
+<body>
+    <h1>Simple E-Paper Test</h1>
+    
+    <button onclick="testClear()">Clear Display</button>
+    <button onclick="testPattern()">Test Pattern</button>
+    
+    <div id="result">Click a button to test</div>
+    
+    <script>
+        function testClear() {
+            console.log('Testing clear...');
+            document.getElementById('result').innerHTML = 'Calling /clear...';
+            
+            fetch('/clear')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Clear result:', data);
+                    document.getElementById('result').innerHTML = 'Clear: ' + data.message;
+                })
+                .catch(error => {
+                    console.error('Clear error:', error);
+                    document.getElementById('result').innerHTML = 'Error: ' + error;
+                });
+        }
+        
+        function testPattern() {
+            console.log('Testing pattern...');
+            document.getElementById('result').innerHTML = 'Calling /test...';
+            
+            fetch('/test')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Test result:', data);
+                    document.getElementById('result').innerHTML = 'Test: ' + data.message;
+                })
+                .catch(error => {
+                    console.error('Test error:', error);
+                    document.getElementById('result').innerHTML = 'Error: ' + error;
+                });
+        }
+    </script>
+</body>
+</html>

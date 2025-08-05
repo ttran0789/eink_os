@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>E-Paper Display Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        h1, h2 { color: #333; }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .button { 
+            padding: 10px 20px; 
+            margin: 5px; 
+            cursor: pointer; 
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .button:hover { background-color: #45a049; }
+        .button:disabled { 
+            background-color: #ccc; 
+            cursor: not-allowed;
+        }
+        .status { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background-color: #f0f0f0; 
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .error { color: #d32f2f; }
+        .success { color: #388e3c; }
+        .input-group {
+            margin: 20px 0;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ E-Paper Display Control</h1>
+        
+        <div class="section">
+            <h2>Basic Controls</h2>
+            <button class="button" onclick="callAPI('/clear')">Clear Display</button>
+            <button class="button" onclick="callAPI('/test')">Test Pattern</button>
+            <button class="button" onclick="callAPI('/hello')">Hello World</button>
+            <button class="button" onclick="callAPI('/time')">Show Time</button>
+            <button class="button" onclick="callAPI('/sleep')">Sleep</button>
+            <button class="button" onclick="callAPI('/wake')">Wake</button>
+        </div>
+        
+        <div class="section">
+            <h2>Custom Text</h2>
+            <div class="input-group">
+                <input type="text" id="customText" placeholder="Enter text to display" />
+                <button class="button" onclick="displayCustomText()">Display</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Applications</h2>
+            <button class="button" onclick="callAPI('/quiz/start')">Harry Potter Quiz</button>
+        </div>
+        
+        <div id="status" class="status">Ready</div>
+    </div>
+    
+    <script>
+        function callAPI(endpoint) {
+            updateStatus('Loading...');
+            fetch(endpoint)
+                .then(response => response.json())
+                .then(data => {
+                    updateStatus(data.status + ': ' + data.message, data.status);
+                })
+                .catch(error => {
+                    updateStatus('Error: ' + error, 'error');
+                });
+        }
+        
+        function displayCustomText() {
+            const text = document.getElementById('customText').value;
+            if (!text) {
+                updateStatus('Please enter some text', 'error');
+                return;
+            }
+            
+            updateStatus('Sending text...');
+            fetch('/text', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateStatus(data.status + ': ' + data.message, data.status);
+            })
+            .catch(error => {
+                updateStatus('Error: ' + error, 'error');
+            });
+        }
+        
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status';
+            if (type) {
+                statusEl.className += ' ' + type;
+            }
+        }
+    </script>
+</body>
+</html>

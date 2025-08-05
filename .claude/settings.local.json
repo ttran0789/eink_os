@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(scp:*)",
+      "Bash(git init:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git add:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git commit:*)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --index-filter \"git rm --cached --ignore-unmatch examples/.env\" --prune-empty --tag-name-filter cat -- --all)",
+      "Bash(rm:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)"
+    ],
+    "deny": []
+  }
+}
