@@ -1,17 +1,32 @@
 # E-Paper Display Control System
 
-A Flask web application for remotely controlling a Waveshare 2.7" 4-bit grayscale e-Paper display connected to a Raspberry Pi. Control your e-Paper display through a web interface from any device on your network.
+A comprehensive Flask web application that transforms a Raspberry Pi + Waveshare e-Paper display into a complete AI art creation and display platform. Generate custom images with OpenAI DALL-E 3, browse a gallery of 185+ AI artworks, and control your e-Paper display through an intuitive web interface.
 
-## 🖥️ Features
+## ✨ Features
 
-- **Web-based Control Interface** - Clean, responsive web UI with buttons and forms
-- **Multiple Display Functions** - Clear screen, show text, display patterns, show current time
-- **Custom Text Display** - Enter any text with automatic word wrapping
-- **Harry Potter Quiz** - Interactive quiz with AI-generated grayscale images
-- **Real-time Status Updates** - Live feedback on display operations
-- **Multiple App Versions** - Different Flask apps for various use cases
+### 🎨 AI Image Generation
+- **Custom Image Creation** - Generate any image from text prompts using OpenAI DALL-E 3
+- **Instant Display** - Create and display images in ~25 seconds
+- **Gallery Integration** - Save generated images to browseable gallery
+- **Perfect Processing** - Automatic cropping, resizing, and grayscale optimization for e-Paper
+
+### 🖼️ Advanced Image Gallery  
+- **185+ AI Artworks** - Pre-generated Harry Potter themed images + your custom creations
+- **Smart Descriptions** - Each image has contextual descriptions and creation dates
+- **Interactive Browsing** - Click to display any image, edit descriptions, or get random art
+- **Metadata Management** - Persistent storage of prompts and descriptions
+
+### 💻 Complete Web Interface
+- **Intuitive Design** - Modern, responsive UI with real-time status updates
+- **Multiple Display Modes** - Text, patterns, time display, and image gallery
+- **Error Handling** - Robust validation and user-friendly error messages
+- **Live Feedback** - Progress tracking for AI generation and display operations
+
+### 🔧 Technical Excellence
+- **Hybrid Display System** - 1-bit B&W for text + 4-bit grayscale for images
 - **Comprehensive Logging** - Detailed logs for debugging and monitoring
-- **Startup Scripts** - Easy server management and auto-start capabilities
+- **RESTful API** - Complete endpoint coverage for integration and automation
+- **Optimized Performance** - Fast image processing and efficient e-Paper refreshing
 
 ## 🛠️ Hardware Requirements
 
@@ -63,8 +78,11 @@ pip install flask pillow python-dotenv openai
 # Copy environment template
 cp examples/.env.example examples/.env
 
-# Edit with your OpenAI API key (for quiz feature)
+# Edit with your OpenAI API key (REQUIRED for AI image generation)
 nano examples/.env
+
+# Add your OpenAI API key:
+OPENAI_KEY=your_actual_openai_api_key_here
 ```
 
 ### 5. Start the Server
@@ -75,8 +93,8 @@ chmod +x start_server.sh
 # Start the Flask application
 ./start_server.sh
 
-# Or start manually
-python app_4bit.py
+# Or start the full-featured app manually (RECOMMENDED)
+python app_1bit_working.py
 ```
 
 ### 6. Access Web Interface
@@ -87,34 +105,62 @@ http://your-pi-ip:5000
 
 ## 🎮 Usage
 
-### Web Interface
-The main interface provides buttons for common operations:
+### 🎨 AI Image Generation
+1. **Navigate to**: `http://your-pi-ip:5000`
+2. **Enter a prompt**: *"A magical forest with glowing mushrooms"*
+3. **Choose generation mode**:
+   - **Generate & Display** - See your image immediately (~25 seconds)
+   - **Generate Only** - Save to gallery for later (~15 seconds)
+
+### 🖼️ Image Gallery Management  
+1. **Browse Gallery** - View 185+ AI images with descriptions
+2. **Display Images** - Click any image to show on e-Paper display
+3. **Edit Descriptions** - Customize image descriptions for better organization
+4. **Random Art** - Get instant inspiration with random image display
+
+### 💻 Basic Display Controls
 - **Clear Display** - Blank the screen
-- **Test Pattern** - Show geometric shapes and lines
-- **Hello World** - Display greeting message
-- **Show Time** - Current date and time
-- **Custom Text** - Enter your own message
-- **Harry Potter Quiz** - Start interactive quiz
-- **Sleep/Wake** - Power management
+- **Test Pattern** - Show geometric shapes (1-bit B&W)
+- **Hello World** - Display greeting message (1-bit B&W)  
+- **Show Time** - Current date and time (1-bit B&W)
+- **Custom Text** - Enter any message with word wrapping (1-bit B&W)
 
-### API Endpoints
+### 🔌 API Endpoints
 
-#### GET Endpoints
+#### 🎨 AI Image Generation
 ```http
-GET /           # Main web interface
-GET /clear      # Clear display
-GET /test       # Show test pattern
-GET /hello      # Display "Hello World"
-GET /time       # Show current time
-GET /sleep      # Put display to sleep
-GET /wake       # Wake display
-GET /quiz/start # Start Harry Potter quiz
+POST /generate_image           # Generate and display image
+POST /generate_image_only      # Generate and save to gallery
+
+# Example:
+{
+  "prompt": "A serene mountain landscape with a lake"
+}
 ```
 
-#### POST Endpoints
+#### 🖼️ Image Gallery Management
 ```http
-POST /text      # Display custom text
-Content-Type: application/json
+GET  /images/list              # Browse all images with descriptions
+GET  /images/random            # Display random image
+POST /images/display           # Display specific image
+POST /images/update_description # Update image description
+
+# Example:
+{
+  "filename": "ai_custom_20250805_184711_resized.bmp"
+}
+```
+
+#### 💻 Basic Display Controls
+```http
+GET  /                         # Main web interface
+GET  /clear                    # Clear display
+GET  /test                     # Show test pattern (1-bit B&W)
+GET  /hello                    # Display "Hello World" (1-bit B&W)
+GET  /time                     # Show current time (1-bit B&W)
+POST /text                     # Display custom text (1-bit B&W)
+
+# Example:
 {
   "text": "Your custom message here"
 }
@@ -136,22 +182,23 @@ curl http://localhost:5000/clear
 
 ```
 eink_os/
-├── app_4bit.py                    # Main Flask application (4-bit grayscale)
-├── app_enhanced.py               # Enhanced version with full web UI
-├── app_safe.py                   # Version with extensive error handling
+├── app_1bit_working.py            # 🌟 MAIN APPLICATION (Full-featured)
+│                                  # ✨ AI image generation with DALL-E 3
+│                                  # 🖼️ 185+ image gallery with descriptions
+│                                  # 💻 Complete web interface
+├── app_4bit.py                    # 4-bit grayscale app (display issues)
+├── app_enhanced.py               # Enhanced version with web UI  
 ├── templates/                    # HTML templates
-│   ├── index.html               # Main web interface
-│   └── debug.html               # Debug interface
+│   └── index.html               # Modern web interface with AI features
 ├── lib/                         # Waveshare EPD library
 │   └── waveshare_epd/          # Display drivers
-├── examples/                    # Example scripts and components
-│   ├── harrypotter_quiz.py     # Interactive quiz
+├── examples/                    # AI generation and quiz components
+│   ├── harrypotter_quiz.py     # Interactive quiz with AI images
 │   ├── helper_quiz.py          # Quiz helper functions
-│   ├── image_generator.py      # AI image generation
-│   └── .env.example           # Environment template
-├── pic/                        # Image assets
-├── scripts/                    # Startup and utility scripts
-└── CLAUDE.md                   # Detailed project documentation
+│   ├── image_generator.py      # AI image processing pipeline  
+│   └── .env.example           # Environment template (OpenAI key)
+├── pic/                        # Static image assets
+└── CLAUDE.md                   # 📚 Comprehensive documentation
 ```
 
 ## ⚙️ Configuration
