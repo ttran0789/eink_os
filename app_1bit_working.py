@@ -4,6 +4,7 @@ import sys
 import time
 import logging
 import glob
+import json
 from flask import Flask, jsonify, request, render_template
 from datetime import datetime
 
@@ -25,6 +26,7 @@ libdir = os.path.join(epaper_root, 'lib')
 examplesdir = os.path.join(epaper_root, 'examples')
 picdir = os.path.join(epaper_root, 'pic')
 images_dir = '/home/pi/rpi-screen/images'  # AI generated images directory
+metadata_file = '/home/pi/rpi-screen/image_metadata.json'  # Image descriptions/prompts
 
 if os.path.exists(libdir):
     sys.path.insert(0, libdir)
@@ -105,6 +107,62 @@ def display_image_4bit(filepath):
     except Exception as e:
         logger.error(f"Error displaying 4-bit image: {e}")
         return False
+
+def load_image_metadata():
+    """Load image metadata from JSON file"""
+    try:
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                return json.load(f)
+        else:
+            return {}
+    except Exception as e:
+        logger.error(f"Error loading metadata: {e}")
+        return {}
+
+def save_image_metadata(metadata):
+    """Save image metadata to JSON file"""
+    try:
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving metadata: {e}")
+        return False
+
+def get_image_description(filename):
+    """Get description for an image, with fallbacks"""
+    metadata = load_image_metadata()
+    
+    # Check if we have a specific description
+    if filename in metadata:
+        return metadata[filename]
+    
+    # Generate a default description based on timestamp and type
+    if 'ai_hp' in filename:
+        # Extract timestamp if available
+        import re
+        match = re.search(r'(\d{8}_\d{6})', filename)
+        if match:
+            timestamp_str = match.group(1)
+            try:
+                # Parse timestamp: YYYYMMDD_HHMMSS
+                from datetime import datetime
+                timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                date_str = timestamp.strftime('%B %d, %Y at %I:%M %p')
+                return f"Harry Potter magical world artwork generated on {date_str}. Features Hogwarts castle, magical creatures, wizarding world elements, and enchanted landscapes."
+            except:
+                pass
+        
+        return "AI-generated Harry Potter magical world artwork featuring Hogwarts castle, magical creatures, and wizarding world elements with vibrant, enchanted landscapes."
+    
+    return "AI-generated artwork"
+
+def update_image_metadata(filename, description):
+    """Update description for a specific image"""
+    metadata = load_image_metadata()
+    metadata[filename] = description
+    return save_image_metadata(metadata)
 
 @app.route('/')
 def index():
@@ -320,7 +378,7 @@ def start_quiz():
 
 @app.route('/images/list')
 def list_images():
-    """List all available AI-generated images"""
+    """List all available AI-generated images with descriptions"""
     logger.info("Image list requested")
     try:
         if not os.path.exists(images_dir):
@@ -333,15 +391,32 @@ def list_images():
         # Sort by modification time (newest first)
         image_files.sort(key=os.path.getmtime, reverse=True)
         
-        # Extract just filenames for response
-        image_names = [os.path.basename(f) for f in image_files]
+        # Create image objects with metadata
+        images_with_metadata = []
+        for filepath in image_files[:50]:  # Limit to 50 most recent
+            filename = os.path.basename(filepath)
+            description = get_image_description(filename)
+            
+            # Get file modification time for display
+            try:
+                mtime = os.path.getmtime(filepath)
+                from datetime import datetime
+                created_date = datetime.fromtimestamp(mtime).strftime('%m/%d/%Y %I:%M %p')
+            except:
+                created_date = 'Unknown'
+            
+            images_with_metadata.append({
+                'filename': filename,
+                'description': description,
+                'created': created_date
+            })
         
-        logger.info(f"Found {len(image_names)} images")
+        logger.info(f"Found {len(image_files)} images, returning {len(images_with_metadata)} with metadata")
         return jsonify({
             'status': 'success', 
-            'message': f'Found {len(image_names)} images',
-            'images': image_names[:50],  # Limit to 50 most recent
-            'total_count': len(image_names)
+            'message': f'Found {len(image_files)} images',
+            'images': images_with_metadata,
+            'total_count': len(image_files)
         })
     except Exception as e:
         logger.error(f"Error listing images: {e}")
@@ -408,6 +483,39 @@ def display_random_image():
             
     except Exception as e:
         logger.error(f"Error displaying random image: {e}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/images/update_description', methods=['POST'])
+def update_image_description():
+    """Update description for an image"""
+    logger.info("Image description update requested")
+    try:
+        data = request.json
+        if not data or 'filename' not in data or 'description' not in data:
+            return jsonify({'status': 'error', 'message': 'Filename and description required'})
+        
+        filename = data['filename']
+        description = data['description'].strip()
+        
+        if not description:
+            return jsonify({'status': 'error', 'message': 'Description cannot be empty'})
+        
+        # Security check - ensure filename is valid
+        filepath = os.path.join(images_dir, filename)
+        if not os.path.exists(filepath):
+            return jsonify({'status': 'error', 'message': 'Image file not found'})
+        
+        # Update metadata
+        success = update_image_metadata(filename, description)
+        
+        if success:
+            logger.info(f"Updated description for {filename}: {description[:50]}...")
+            return jsonify({'status': 'success', 'message': f'Updated description for {filename}'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to save description'})
+            
+    except Exception as e:
+        logger.error(f"Error updating image description: {e}")
         return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':

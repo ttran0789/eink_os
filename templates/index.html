@@ -202,19 +202,44 @@
             }
             
             let html = `<p style="margin-bottom: 10px;"><strong>Showing ${images.length} of ${totalCount} images</strong></p>`;
-            images.forEach(filename => {
+            images.forEach((image, index) => {
+                // Handle both old format (string) and new format (object)
+                let filename, description, created;
+                if (typeof image === 'string') {
+                    filename = image;
+                    description = 'Harry Potter magical world artwork';
+                    created = 'Unknown';
+                } else {
+                    filename = image.filename;
+                    description = image.description;
+                    created = image.created || 'Unknown';
+                }
+                
                 // Extract timestamp from filename for display
                 const match = filename.match(/(\d{8}_\d{6})/);
-                const timestamp = match ? match[1] : 'unknown';
+                const timestamp = match ? match[1] : `${index + 1}`;
                 const displayName = `Image ${timestamp}`;
                 
+                // Truncate long descriptions
+                const shortDescription = description.length > 100 ? 
+                    description.substring(0, 100) + '...' : description;
+                
                 html += `
-                    <div style="margin: 5px 0; padding: 8px; border: 1px solid #eee; border-radius: 4px; cursor: pointer; background: #fafafa;"
-                         onclick="displayImage('${filename}')" 
-                         onmouseover="this.style.background='#e3f2fd'"
-                         onmouseout="this.style.background='#fafafa'">
-                        <strong>${displayName}</strong><br>
-                        <small style="color: #666;">${filename}</small>
+                    <div style="margin: 5px 0; padding: 8px; border: 1px solid #eee; border-radius: 4px; background: #fafafa;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px;">
+                            <strong style="color: #333;">${displayName}</strong>
+                            <div style="font-size: 12px; color: #888;">${created}</div>
+                        </div>
+                        <div style="margin: 5px 0; color: #555; font-size: 14px; line-height: 1.3;">
+                            ${shortDescription}
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <button class="button" style="font-size: 12px; padding: 4px 8px;" 
+                                    onclick="displayImage('${filename}')">🖼️ Display</button>
+                            <button class="button" style="font-size: 12px; padding: 4px 8px; background: #2196F3;" 
+                                    onclick="editDescription('${filename}', \`${description.replace(/`/g, '\\`')}\`)">✏️ Edit</button>
+                        </div>
+                        <div style="margin-top: 5px; font-size: 11px; color: #888;">${filename}</div>
                     </div>`;
             });
             listEl.innerHTML = html;
@@ -235,6 +260,35 @@
             .catch(error => {
                 updateStatus('Error displaying image: ' + error, 'error');
             });
+        }
+        
+        function editDescription(filename, currentDescription) {
+            const newDescription = prompt('Edit image description:', currentDescription);
+            if (newDescription !== null && newDescription.trim() !== currentDescription) {
+                updateStatus('Updating description...');
+                
+                fetch('/images/update_description', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        filename: filename,
+                        description: newDescription.trim()
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        updateStatus(data.message, 'success');
+                        // Refresh the image list to show updated description
+                        setTimeout(() => loadImageList(), 1000);
+                    } else {
+                        updateStatus('Error: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    updateStatus('Error updating description: ' + error, 'error');
+                });
+            }
         }
         function updateStatus(message, type) {
             const statusEl = document.getElementById('status');
