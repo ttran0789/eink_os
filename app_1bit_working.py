@@ -5,8 +5,11 @@ import time
 import logging
 import glob
 import json
+import requests
 from flask import Flask, jsonify, request, render_template
 from datetime import datetime
+from dotenv import load_dotenv
+from openai import OpenAI
 
 # Configure enhanced logging
 logging.basicConfig(
@@ -32,6 +35,10 @@ if os.path.exists(libdir):
     sys.path.insert(0, libdir)
 if os.path.exists(examplesdir):
     sys.path.insert(0, examplesdir)
+
+# Load environment variables and initialize OpenAI
+load_dotenv(os.path.join(examplesdir, '.env'))
+client = OpenAI(api_key=os.getenv("OPENAI_KEY")) if os.getenv("OPENAI_KEY") else None
 
 # Import e-Paper library (1-bit black and white)
 from waveshare_epd import epd2in7_V2
@@ -140,7 +147,7 @@ def get_image_description(filename):
     
     # Generate a default description based on timestamp and type
     if 'ai_hp' in filename:
-        # Extract timestamp if available
+        # Extract timestamp if available for Harry Potter images
         import re
         match = re.search(r'(\d{8}_\d{6})', filename)
         if match:
@@ -156,6 +163,22 @@ def get_image_description(filename):
         
         return "AI-generated Harry Potter magical world artwork featuring Hogwarts castle, magical creatures, and wizarding world elements with vibrant, enchanted landscapes."
     
+    elif 'ai_custom' in filename:
+        # Custom generated images - extract timestamp
+        import re
+        match = re.search(r'(\d{8}_\d{6})', filename)
+        if match:
+            timestamp_str = match.group(1)
+            try:
+                from datetime import datetime
+                timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                date_str = timestamp.strftime('%B %d, %Y at %I:%M %p')
+                return f"Custom AI-generated artwork created on {date_str}"
+            except:
+                pass
+        
+        return "Custom AI-generated artwork"
+    
     return "AI-generated artwork"
 
 def update_image_metadata(filename, description):
@@ -163,6 +186,103 @@ def update_image_metadata(filename, description):
     metadata = load_image_metadata()
     metadata[filename] = description
     return save_image_metadata(metadata)
+
+def generate_image_from_prompt(prompt):
+    """Generate image from user prompt using OpenAI DALL-E"""
+    if not client:
+        raise Exception("OpenAI client not initialized. Check API key in .env file.")
+    
+    logger.info(f"Generating image with prompt: {prompt}")
+    
+    # Generate timestamp for unique filename
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    base_filename = f"ai_custom_{timestamp}"
+    
+    # File paths for processing pipeline
+    original_path = os.path.join(images_dir, f"{base_filename}.bmp")
+    cropped_path = os.path.join(images_dir, f"{base_filename}_crop.bmp")
+    resized_path = os.path.join(images_dir, f"{base_filename}_resized.bmp")
+    
+    try:
+        # Step 1: Generate image with OpenAI DALL-E
+        logger.info("Requesting image from OpenAI DALL-E...")
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=f"Illustration about '{prompt}', minimal colors, minimalistic, reduce small details.",
+            n=1,
+            size="1024x1024",
+            response_format="url"
+        )
+        
+        # Step 2: Download the image
+        logger.info("Downloading generated image...")
+        image_url = response.data[0].url
+        img_data = requests.get(image_url).content
+        
+        with open(original_path, 'wb') as f:
+            f.write(img_data)
+        logger.info(f"Image saved to {original_path}")
+        
+        # Step 3: Crop to 3:2 aspect ratio (same as Harry Potter quiz)
+        logger.info("Cropping image to 3:2 aspect ratio...")
+        crop_image_3_2(original_path, cropped_path)
+        
+        # Step 4: Resize to display dimensions
+        logger.info("Resizing image for e-Paper display...")
+        resize_image_for_display(cropped_path, resized_path)
+        
+        # Step 5: Save the user's prompt as the image description
+        logger.info("Saving image metadata...")
+        resized_filename = os.path.basename(resized_path)
+        update_image_metadata(resized_filename, prompt)
+        
+        logger.info(f"Image generation complete: {resized_filename}")
+        return resized_path, resized_filename
+        
+    except Exception as e:
+        # Clean up partial files on error
+        for path in [original_path, cropped_path, resized_path]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except:
+                    pass
+        raise e
+
+def crop_image_3_2(filepath, filepath_new):
+    """Crop image to 3:2 aspect ratio (from image_generator.py)"""
+    logger.info("Cropping image to 3:2 aspect ratio...")
+    img = Image.open(filepath)
+    width, height = img.size
+    target_ratio = 3 / 2  # width / height
+    current_ratio = width / height
+
+    if current_ratio > target_ratio:
+        # Image is too wide → crop width
+        new_width = int(height * target_ratio)
+        left = (width - new_width) / 2
+        top = 0
+        right = left + new_width
+        bottom = height
+    else:
+        # Image is too tall or square → crop height
+        new_height = int(width / target_ratio)
+        top = (height - new_height) / 2
+        left = 0
+        right = width
+        bottom = top + new_height
+
+    img_cropped = img.crop((left, top, right, bottom))
+    img_cropped.save(filepath_new)
+    logger.info(f"Image cropped and saved to {filepath_new}")
+
+def resize_image_for_display(filepath, filepath_new):
+    """Resize image to fit e-Paper display: 264x176 pixels (from image_generator.py)"""
+    logger.info("Resizing image for e-Paper display...")
+    img = Image.open(filepath)
+    img_resized = img.resize((264, 176), Image.LANCZOS)  # Updated to use LANCZOS
+    img_resized.save(filepath_new)
+    logger.info(f"Image resized to 264x176 and saved to {filepath_new}")
 
 @app.route('/')
 def index():
@@ -384,9 +504,11 @@ def list_images():
         if not os.path.exists(images_dir):
             return jsonify({'status': 'error', 'message': 'Images directory not found'})
         
-        # Find all resized Harry Potter images (these are display-ready)
-        pattern = os.path.join(images_dir, 'ai_hp*resized*.bmp')
-        image_files = glob.glob(pattern)
+        # Find all resized AI images (Harry Potter and custom generated)
+        hp_pattern = os.path.join(images_dir, 'ai_hp*resized*.bmp')
+        custom_pattern = os.path.join(images_dir, 'ai_custom*resized*.bmp')
+        
+        image_files = glob.glob(hp_pattern) + glob.glob(custom_pattern)
         
         # Sort by modification time (newest first)
         image_files.sort(key=os.path.getmtime, reverse=True)
@@ -461,9 +583,11 @@ def display_random_image():
         if not os.path.exists(images_dir):
             return jsonify({'status': 'error', 'message': 'Images directory not found'})
         
-        # Find all resized images
-        pattern = os.path.join(images_dir, 'ai_hp*resized*.bmp')
-        image_files = glob.glob(pattern)
+        # Find all resized AI images (Harry Potter and custom generated)
+        hp_pattern = os.path.join(images_dir, 'ai_hp*resized*.bmp')
+        custom_pattern = os.path.join(images_dir, 'ai_custom*resized*.bmp')
+        
+        image_files = glob.glob(hp_pattern) + glob.glob(custom_pattern)
         
         if not image_files:
             return jsonify({'status': 'error', 'message': 'No images found'})
@@ -517,6 +641,75 @@ def update_image_description():
     except Exception as e:
         logger.error(f"Error updating image description: {e}")
         return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/generate_image', methods=['POST'])
+def generate_and_display_image():
+    """Generate image from user prompt and display it on e-Paper"""
+    logger.info("AI image generation requested")
+    try:
+        data = request.json
+        if not data or 'prompt' not in data:
+            return jsonify({'status': 'error', 'message': 'Prompt required'})
+        
+        prompt = data['prompt'].strip()
+        if not prompt:
+            return jsonify({'status': 'error', 'message': 'Please provide a valid prompt'})
+        
+        if not client:
+            return jsonify({'status': 'error', 'message': 'OpenAI API key not configured'})
+        
+        logger.info(f"Generating image for prompt: {prompt}")
+        
+        # Generate, process, and save the image
+        image_path, filename = generate_image_from_prompt(prompt)
+        
+        # Display the generated image on e-Paper using 4-bit grayscale
+        success = display_image_4bit(image_path)
+        
+        if success:
+            return jsonify({
+                'status': 'success', 
+                'message': f'Generated and displayed: "{prompt}"',
+                'filename': filename
+            })
+        else:
+            return jsonify({
+                'status': 'error', 
+                'message': f'Image generated but display failed: {filename}'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error generating image: {e}")
+        return jsonify({'status': 'error', 'message': f'Generation failed: {str(e)}'})
+    
+@app.route('/generate_image_only', methods=['POST'])  
+def generate_image_only():
+    """Generate image from prompt without displaying (for testing)"""
+    logger.info("AI image generation (no display) requested")
+    try:
+        data = request.json
+        if not data or 'prompt' not in data:
+            return jsonify({'status': 'error', 'message': 'Prompt required'})
+        
+        prompt = data['prompt'].strip()
+        if not prompt:
+            return jsonify({'status': 'error', 'message': 'Please provide a valid prompt'})
+        
+        if not client:
+            return jsonify({'status': 'error', 'message': 'OpenAI API key not configured'})
+        
+        # Generate and process the image (no display)
+        image_path, filename = generate_image_from_prompt(prompt)
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Image generated: "{prompt}"',
+            'filename': filename
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating image: {e}")
+        return jsonify({'status': 'error', 'message': f'Generation failed: {str(e)}'})
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
